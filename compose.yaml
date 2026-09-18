@@ -1,0 +1,64 @@
+services:
+  sqlserver-source:
+    image: mcr.microsoft.com/mssql/server:2025-CU8-ubuntu-24.04
+    container_name: de-sqlserver-source
+
+    restart: unless-stopped
+
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${SQLSERVER_PASSWORD}
+      MSSQL_PID: "Developer"
+    
+    ports:
+      - "1456:1433"
+
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+  
+    networks:
+      - data-engineering-net
+
+  postgres-warehouse:
+    image: postgres:16-bookworm
+    container_name: de-postgres-warehouse
+
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DATABASE}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+    ports:
+      - "5433:5432"
+    
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+    networks:
+      - data-engineering-net
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: de-pgadmin
+
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+    
+    ports:
+    - "5050:80"
+    
+    networks:
+    - data-engineering-net
+
+volumes:
+
+  sqlserver-data:
+
+  postgres-data:
+
+networks:
+  data-engineering-net:
+    driver: bridge
