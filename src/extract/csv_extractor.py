@@ -83,7 +83,7 @@ def validate_columns(
 def extract_csv(
     file_path: Path,
     required_columns: list[str],
-) -> list[dict[str, str]]:
+) -> list[dict[str, str | int]]:
     """
     Extrae registros después de validar
     la estructura del CSV.
@@ -117,11 +117,30 @@ def extract_csv(
             required_columns,
         )
 
+        if "source_row_number" in actual_columns:
+            raise ValueError(
+                "El archivo contiene la columna reservada: source_row_number."
+            )
+
         reader.fieldnames = actual_columns
 
         logger.info("Contrato estructural validado correctamente.")
 
-        records = list(reader)
+        records = []
+
+        for row_number, record in enumerate(reader, start=2):
+            if None in record:
+                raise ValueError(
+                    f"Fila {row_number}: contiene más campos que el encabezado."
+                )
+
+            if any(value is None for value in record.values()):
+                raise ValueError(
+                    f"Fila {row_number}: contiene menos campos que el encabezado."
+                )
+
+            record["source_row_number"] = row_number
+            records.append(record)
 
     logger.info(
         "Registros extraídos: %s",
