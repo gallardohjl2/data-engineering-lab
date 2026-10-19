@@ -1,232 +1,81 @@
 # PROJECT_STATE — Data Engineering Lab
 
-> Documento operativo de continuidad entre chats.
+> Estado operativo actualizado con la información confirmada al cierre de DE-05 (18 de octubre de 2026). Sustituir el contenido de `PROJECT_STATE.md` del repositorio después de revisarlo.
 
-## 1. Propósito
+## Propósito y arquitectura
 
-Construir paso a paso un proyecto didáctico de Data Engineering reproducible con alumnos y progresivamente cercano a escenarios reales, evitando complejidad antes de que exista una necesidad concreta.
+Laboratorio didáctico incremental: CSV / Excel / SQL Server → extracción Python y contrato estructural → Pandas (tipos, calidad, clasificación) → persistencia RAW / rechazados en PostgreSQL → STAGE y modelos dbt → warehouse y marts → Power BI. Docker Compose proporciona infraestructura; Airflow se introducirá después como orquestador.
 
-## 2. Arquitectura objetivo
+## Bloques
 
-```text
-Excel / CSV / SQL Server
-          ↓
-   Extractores Python
-          ↓
- Validación estructural
-          ↓
-        Pandas
- tipos / nulos / calidad
-          ↓
- válidos / rechazados
-          ↓
-         RAW
-          ↓
-        STAGE
-          ↓
-         dbt
-          ↓
-  Data Warehouse
-          ↓
-     Data Marts
-          ↓
-      Power BI
-```
+- Preparación, Git y GitHub: terminado.
+- Infraestructura Docker con SQL Server, PostgreSQL y pgAdmin: trabajada.
+- Fuentes de datos (CSV, Excel y SQL Server): terminado.
+- DE-04 extracción, validación estructural y logging: terminado.
+- **DE-05 transformación y calidad con Pandas: TERMINADO.**
+- **Siguiente: DE-06 — Carga y persistencia inicial en PostgreSQL (RAW y destinos de calidad), por diseñar incrementalmente.**
 
-Airflow orquestará el pipeline y Docker Compose desplegará la infraestructura.
+## Estado funcional confirmado
 
-## 3. Principios vigentes
+- `src/extract/csv_extractor.py`: extrae `list[dict]` con `csv.DictReader`; valida archivo, encabezados requeridos y duplicados, permite columnas extra y detecta filas con más o menos campos; reserva `source_row_number` y lo genera por registro (posición lógica, no necesariamente número de línea física en CSV multilínea).
+- `src/transform/ventas_transformer.py`: convierte `cantidad`, `precio_unitario`, `descuento_pct` y `fecha` usando Pandas y `errors="coerce"`.
+- `src/quality/ventas_quality.py`: valida cantidad y precio positivos, descuento 0–100, fecha válida y duplicados de `(venta_id, linea_id)` con `keep=False`; produce motivos de calidad, diagnóstico detallado y vista de investigación con datos originales.
+- `src/quality/ventas_policy.py`: clasifica `APTO`, `RECHAZADO`, `REVISION`; problemas de cantidad, precio, descuento o fecha son bloqueantes; duplicidad aislada pasa a revisión. Prepara aptos completos transformados y separa salidas problemáticas.
+- `src/main.py`: coordina extracción → transformación → diagnóstico → clasificación → preparación en memoria de tres salidas; ruta habitual `data/incoming/ventas.csv`. No persiste todavía los resultados.
+- `src/config/logging_config.py`: se conservó la versión de DE-04, con consola y `logs/pipeline.log`; `main.py` llama a `setup_logging(PROJECT_ROOT)`.
+- Errores críticos `FileNotFoundError` y `ValueError` se registran y se propagan con `raise`, para obtener código de salida no cero. Archivo con encabezados válidos y cero registros: advertencia y salida 0 por decisión actual.
 
-- Avance incremental y didáctico.
-- Explicar primero la necesidad; implementar después.
-- Evitar sobreingeniería.
-- Python puro para extracción y validación estructural.
-- Pandas para tipado, conversiones, nulos, duplicados y calidad.
-- dbt para transformaciones y pruebas en la plataforma analítica.
-- No inventar contenido de archivos existentes.
+## Resultados y verificaciones
 
-## 4. Flujo Git vigente
+- `data/incoming/ventas.csv`: 18 registros, **11 APTO, 5 RECHAZADO, 2 REVISION**; código de salida 0.
+- `data/test_cases/ventas_cantidad_invalida.csv`: 18 registros, **8 APTO, 8 RECHAZADO, 2 REVISION**.
+- Archivo inexistente: `FileNotFoundError`, código 1.
+- Fila estructural con menos campos: `ValueError` y código 1.
+- Archivo con encabezado pero sin filas: warning, código 0.
+- La condición de cantidad de campos sobrantes y los estados desconocidos también se comprobaron a nivel de función.
 
-A partir de DE-05 se trabajará directamente sobre `main`.
+## Decisiones que deben mantenerse
 
-```text
-main local
-   ↓
-desarrollar el bloque
-   ↓
-verificar
-   ↓
-git status
-   ↓
-git add / git commit
-   ↓
-al cerrar el bloque
-   ↓
-git push origin main
-```
+- Diferenciar validación estructural (Python) de calidad de contenido (Pandas).
+- Conservar origen y motivos en rechazados/revisión; no sustituirlos por valores convertidos a `NaN` / `NaT`.
+- La trazabilidad `source_row_number` es local al archivo; para múltiples fuentes o ejecuciones hará falta identidad de archivo/lote.
+- No descartar automáticamente claves duplicadas: enviarlas a revisión, salvo reglas bloqueantes adicionales.
+- No interpretar `APTO` como certificación universal de calidad: expresa cumplimiento de las reglas implementadas.
+- No introducir carga, lotes, watermarks, idempotencia, Airflow ni dbt hasta que su problema concreto se estudie.
+- Flujo Git **adoptado en DE-05**: desarrollar en rama local, verificar, commit, merge local a `main`, `push origin main`, eliminar rama; **sin Pull Request y sin necesidad de publicar la rama de trabajo** en este laboratorio por ahora. Esto reemplaza la indicación antigua de trabajar directamente en `main`.
 
-No se utilizarán Pull Requests por defecto en este laboratorio individual.
-
-DE-04 se desarrolló en `feature/python-ingestion` y debe cerrarse mediante merge local a `main`, push de `main` y eliminación de la rama.
-
-## 5. Bloques completados
-
-### Preparación, Git y GitHub
-Estado: TERMINADO
-
-### Infraestructura Docker
-Estado: TRABAJADO
-
-Incluye SQL Server, PostgreSQL, pgAdmin, redes, volúmenes, puertos, persistencia y healthchecks.
-
-### Fuentes de datos
-Estado: TERMINADO
-
-Fuentes principales:
-
-```text
-data/incoming/clientes.xlsx
-data/incoming/ventas.csv
-SQL Server: productos / sucursales
-```
-
-### DE-04 — Pipeline Python: extracción, validación y logging
-Estado: TERMINADO
-
-Se trabajó:
-
-- `csv.DictReader`;
-- salida `list[dict]`;
-- rutas con `pathlib.Path`;
-- `__file__`, `resolve()` y `parent`;
-- módulos y `python -m`;
-- contrato estructural;
-- `set` para columnas faltantes;
-- detección de encabezados duplicados;
-- normalización de encabezados con `strip()`;
-- excepciones;
-- logging básico centralizado a consola;
-- pruebas correctas e incorrectas.
-
-## 6. Decisiones técnicas de DE-04
-
-### Contrato de columnas
-
-- Las columnas obligatorias deben existir.
-- Una columna obligatoria faltante detiene el pipeline.
-- Un encabezado duplicado detiene el pipeline.
-- Las columnas adicionales se permiten.
-- Una columna adicional puede permanecer en los registros extraídos; su destino final se decidirá después.
-
-### Responsabilidades
-
-```text
-src/main.py
-→ coordina el pipeline y maneja errores generales
-
-src/extract/csv_extractor.py
-→ extracción CSV y validación estructural
-
-src/contracts/ventas_contract.py
-→ declara columnas obligatorias
-
-src/config/logging_config.py
-→ configuración mínima de logging
-```
-
-### Logging
-
-- Configuración centralizada.
-- Salida a consola.
-- `logging.getLogger(__name__)` por módulo.
-- `FileHandler`, rotación y observabilidad avanzada quedan para una etapa posterior.
-
-### Material de apoyo
-
-```text
-data/test_cases/
-→ CSV creados para probar casos estructurales
-
-pruebas/referencias/csv_extractor_v1.py
-→ versión anterior del extractor conservada como referencia
-
-pruebas/Ejercicios_repaso/
-→ ejercicios personales/didácticos
-
-pruebas/validacion_columnas/
-→ ejercicios de sets y validación
-```
-
-`docs/notas.md` es una nota personal local y está ignorada por Git.
-
-## 7. Archivos relevantes
+## Archivos relevantes
 
 ```text
 src/main.py
 src/extract/csv_extractor.py
 src/contracts/ventas_contract.py
 src/config/logging_config.py
-
+src/transform/__init__.py
+src/transform/ventas_transformer.py
+src/quality/__init__.py
+src/quality/ventas_quality.py
+src/quality/ventas_policy.py
+requirements.txt
 data/incoming/ventas.csv
 data/incoming/clientes.xlsx
-data/test_cases/
-
-pruebas/Ejercicios_repaso/
-pruebas/validacion_columnas/
-pruebas/referencias/csv_extractor_v1.py
+data/test_cases/ventas_cantidad_invalida.csv
+data/test_cases/ventas_estructura_invalida.csv
+data/test_cases/ventas_sin_registros.csv
+docs/guides/DE05_pandas_guia.md
 ```
 
-## 8. Ejecución actual
+## Git confirmado
 
-Desde la raíz:
+- Rama de trabajo `transformacion-pandas`, commit `1756a15` (`feat: implementar transformacion y calidad de ventas con pandas`).
+- Merge local en `main`: `e8c32e9` (`Merge branch 'transformacion-pandas'`).
+- `origin/main` sincronizado y árbol limpio, comprobados por el usuario.
+- Rama local `transformacion-pandas` eliminada correctamente.
+- La actualización de este archivo de estado **aún debe copiarse al repositorio y registrarse en un commit adicional**; no está incluida en `e8c32e9`.
 
-```powershell
-python -m src.main
-```
+## Siguiente paso (DE-06)
 
-## 9. Verificaciones realizadas en DE-04
-
-- CSV correcto.
-- Archivo inexistente.
-- Columna obligatoria faltante.
-- Columna adicional permitida.
-- Encabezado duplicado.
-- Normalización de encabezados.
-- Logging en éxito y error.
-
-## 10. Bloque activo
-
-### DE-05 — Transformación inicial con Pandas
-
-Objetivo:
-
-Tomar los `list[dict]` producidos por el extractor y comenzar a trabajar el contenido de los datos con Pandas.
-
-Secuencia prevista:
-
-1. explicar por qué `list[dict]` deja de ser suficiente;
-2. crear un `DataFrame`;
-3. inspeccionar columnas, tipos y contenido;
-4. conversiones y tipado;
-5. fechas;
-6. nulos;
-7. duplicados;
-8. primeras reglas de calidad;
-9. preparar la separación entre válidos y rechazados.
-
-No introducir todavía carga a RAW, watermarks, idempotencia, Airflow o dbt.
-
-## 11. Próximo paso inmediato
-
-Cerrar Git de DE-04:
-
-```text
-commit en feature/python-ingestion
-→ merge local a main
-→ push origin main
-→ eliminar feature/python-ingestion
-```
-
-Después abrir el chat:
-
-**DE-05 — Transformación inicial con Pandas**
+1. Revisar estructura actual, `compose.yaml`, esquemas PostgreSQL y configuración real disponible, sin inventar archivos ni conexiones.
+2. Explicar qué significa persistir las salidas de DE-05 y distinguir RAW de destinos de rechazados/revisión.
+3. Diseñar únicamente el primer contrato de destino y una carga inicial simple, después probarla; dejar estrategias full/append/incremental y controles de lote para cuando correspondan.
+4. No confundir la transformación inicial con dbt ni introducir orquestación prematuramente.

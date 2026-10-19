@@ -1069,12 +1069,16 @@ No creamos módulos adicionales de persistencia, calidad avanzada ni orquestaci�
 - **Guardar múltiples `main` operativos:** los experimentos de `main_pandas_inicial.py` quedan documentados en las secciones 5 a 7; la versión oficial es `src/main.py`.
 - **Trabajar con un módulo antiguo importado:** reiniciar el intérprete interactivo al editar archivos de módulos.
 
-## 15. Alcance y cierre pendiente de repositorio
+## 15. Cierre verificado del bloque (18 de octubre de 2026)
 
-**Desarrollo y verificaciones funcionales de DE-05:** terminados según las pruebas compartidas el 18 de octubre de 2026. No equivale todavía a un cierre de Git verificado.
+**DE-05: terminado e integrado en `main`.** En `data/incoming/ventas.csv` se verificaron 18 registros: **11 aptos, 5 rechazados y 2 en revisión**, con salida `0`. Con `data/test_cases/ventas_cantidad_invalida.csv` se observaron 18 registros: **8 aptos, 8 rechazados y 2 en revisión**.
 
-**Verificaciones de cierre pendientes:** revisar `git status`, retirar archivos históricos auxiliares solo después de incorporar sus ejemplos a la guía, comprobar `requirements.txt`, revisar los cambios del extractor, preparar un commit selectivo, hacer push/integración según el flujo Git realmente acordado y actualizar `PROJECT_STATE.md`.
+Pruebas adicionales: archivo inexistente → `FileNotFoundError` y código `1`; fila con menos campos → `ValueError` y código `1`; CSV con encabezados válidos pero sin registros → `WARNING` y código `0`. La comprobación de campos sobrantes fue validada durante el trabajo del extractor.
 
-**Importante sobre Git:** el `PROJECT_STATE.md` disponible indica trabajo directo sobre `main` a partir de DE-05; sin embargo, el estado local compartido muestra la rama `transformacion-pandas`. Hay que resolver explícitamente esa diferencia antes del merge o push, sin asumir que existe un Pull Request ni que se ha completado el cierre.
+Se conservó el logger centralizado de DE-04 con escritura en consola y `logs/pipeline.log` mediante `setup_logging(PROJECT_ROOT)`; los errores críticos se registran y se vuelven a lanzar con `raise`. Se utiliza `data/incoming/ventas.csv` como ruta habitual del pipeline. Las tres salidas se preparan **en memoria**, sin cargar aún PostgreSQL.
 
-**Fuera de DE-05:** carga a PostgreSQL/RAW, persistencia de rechazados, control de lotes, idempotencia y watermarks, pruebas automatizadas, Airflow, dbt y CI/CD. Se introducirán cuando el siguiente problema lo requiera.
+**Git:** rama `transformacion-pandas`; commit funcional `1756a15`; merge local a `main` `e8c32e9`; `origin/main` sincronizado; rama local eliminada. Por ahora, el laboratorio usa ramas y merge local sin Pull Request.
+
+**Documentación operativa pendiente de versionar:** actualizar `PROJECT_STATE.md` y registrar ese cambio en el repositorio. Esta guía documenta el código y las pruebas de DE-05; el estado operativo es un documento distinto.
+
+**Siguiente bloque propuesto:** DE-06 — Carga y persistencia inicial en PostgreSQL. Introducir gradualmente destinos RAW y tratamiento de rechazados/revisión; después, cuando exista la necesidad, estudiar estrategias de carga, trazabilidad entre lotes e idempotencia.
