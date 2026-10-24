@@ -54,3 +54,6 @@ airflow/logs/
 
 .DS_Store
 Thumbs.db
+
+
+NEXT_CHAT_DE*.md
