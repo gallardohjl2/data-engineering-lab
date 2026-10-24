@@ -1,81 +1,90 @@
-# PROJECT_STATE — Data Engineering Lab
-
-> Estado operativo actualizado con la información confirmada al cierre de DE-05 (18 de octubre de 2026). Sustituir el contenido de `PROJECT_STATE.md` del repositorio después de revisarlo.
-
-## Propósito y arquitectura
-
-Laboratorio didáctico incremental: CSV / Excel / SQL Server → extracción Python y contrato estructural → Pandas (tipos, calidad, clasificación) → persistencia RAW / rechazados en PostgreSQL → STAGE y modelos dbt → warehouse y marts → Power BI. Docker Compose proporciona infraestructura; Airflow se introducirá después como orquestador.
-
-## Bloques
-
+PROJECT_STATE — Data Engineering Lab
+Última actualización: 23 de octubre de 2026
+Bloque activo: DE-06 — Carga y persistencia en PostgreSQL
+Situación: unidad de carga full transaccional completada y verificada; DE-06 continúa abierto.
+Propósito y arquitectura
+Laboratorio didáctico incremental: CSV / Excel / SQL Server → extracción Python y contrato estructural → transformación y calidad con Pandas → persistencia en PostgreSQL → STAGE y modelos dbt → warehouse y marts → Power BI. La infraestructura utiliza Docker Compose; Airflow se introducirá posteriormente cuando corresponda la orquestación.
+Bloques
 - Preparación, Git y GitHub: terminado.
 - Infraestructura Docker con SQL Server, PostgreSQL y pgAdmin: trabajada.
-- Fuentes de datos (CSV, Excel y SQL Server): terminado.
-- DE-04 extracción, validación estructural y logging: terminado.
-- **DE-05 transformación y calidad con Pandas: TERMINADO.**
-- **Siguiente: DE-06 — Carga y persistencia inicial en PostgreSQL (RAW y destinos de calidad), por diseñar incrementalmente.**
-
-## Estado funcional confirmado
-
-- `src/extract/csv_extractor.py`: extrae `list[dict]` con `csv.DictReader`; valida archivo, encabezados requeridos y duplicados, permite columnas extra y detecta filas con más o menos campos; reserva `source_row_number` y lo genera por registro (posición lógica, no necesariamente número de línea física en CSV multilínea).
-- `src/transform/ventas_transformer.py`: convierte `cantidad`, `precio_unitario`, `descuento_pct` y `fecha` usando Pandas y `errors="coerce"`.
-- `src/quality/ventas_quality.py`: valida cantidad y precio positivos, descuento 0–100, fecha válida y duplicados de `(venta_id, linea_id)` con `keep=False`; produce motivos de calidad, diagnóstico detallado y vista de investigación con datos originales.
-- `src/quality/ventas_policy.py`: clasifica `APTO`, `RECHAZADO`, `REVISION`; problemas de cantidad, precio, descuento o fecha son bloqueantes; duplicidad aislada pasa a revisión. Prepara aptos completos transformados y separa salidas problemáticas.
-- `src/main.py`: coordina extracción → transformación → diagnóstico → clasificación → preparación en memoria de tres salidas; ruta habitual `data/incoming/ventas.csv`. No persiste todavía los resultados.
-- `src/config/logging_config.py`: se conservó la versión de DE-04, con consola y `logs/pipeline.log`; `main.py` llama a `setup_logging(PROJECT_ROOT)`.
-- Errores críticos `FileNotFoundError` y `ValueError` se registran y se propagan con `raise`, para obtener código de salida no cero. Archivo con encabezados válidos y cero registros: advertencia y salida 0 por decisión actual.
-
-## Resultados y verificaciones
-
-- `data/incoming/ventas.csv`: 18 registros, **11 APTO, 5 RECHAZADO, 2 REVISION**; código de salida 0.
-- `data/test_cases/ventas_cantidad_invalida.csv`: 18 registros, **8 APTO, 8 RECHAZADO, 2 REVISION**.
-- Archivo inexistente: `FileNotFoundError`, código 1.
-- Fila estructural con menos campos: `ValueError` y código 1.
-- Archivo con encabezado pero sin filas: warning, código 0.
-- La condición de cantidad de campos sobrantes y los estados desconocidos también se comprobaron a nivel de función.
-
-## Decisiones que deben mantenerse
-
-- Diferenciar validación estructural (Python) de calidad de contenido (Pandas).
-- Conservar origen y motivos en rechazados/revisión; no sustituirlos por valores convertidos a `NaN` / `NaT`.
-- La trazabilidad `source_row_number` es local al archivo; para múltiples fuentes o ejecuciones hará falta identidad de archivo/lote.
-- No descartar automáticamente claves duplicadas: enviarlas a revisión, salvo reglas bloqueantes adicionales.
-- No interpretar `APTO` como certificación universal de calidad: expresa cumplimiento de las reglas implementadas.
-- No introducir carga, lotes, watermarks, idempotencia, Airflow ni dbt hasta que su problema concreto se estudie.
-- Flujo Git **adoptado en DE-05**: desarrollar en rama local, verificar, commit, merge local a `main`, `push origin main`, eliminar rama; **sin Pull Request y sin necesidad de publicar la rama de trabajo** en este laboratorio por ahora. Esto reemplaza la indicación antigua de trabajar directamente en `main`.
-
-## Archivos relevantes
-
-```text
+- Fuentes de datos: terminado.
+- DE-04 — extracción, contrato estructural y logging: terminado.
+- DE-05 — transformación y calidad con Pandas: terminado.
+- DE-06 — carga y persistencia PostgreSQL: en progreso. Carga full transaccional e idempotencia básica verificadas.
+- Pendiente de DE-06: cierre Git de esta unidad y posterior tratamiento didáctico de append/incremental con un escenario justificado.
+Estado funcional confirmado
+- src/main.py: coordina extracción CSV, transformación Pandas, diagnóstico y política de calidad, preparación de tres DataFrames y persistencia en PostgreSQL.
+- Fuente principal data/incoming/ventas.csv: 18 registros → 11 APTO, 5 RECHAZADO, 2 REVISION.
+- src/extract/csv_extractor.py: extracción con csv.DictReader, contrato estructural y source_row_number por registro.
+- src/transform/ventas_transformer.py: conversión de tipos con Pandas.
+- src/quality/ventas_quality.py y src/quality/ventas_policy.py: diagnóstico, motivos, clasificación y conservación de los valores originales para investigación.
+- src/config/logging_config.py: salida a consola y logs/pipeline.log.
+- src/load/postgres_loader.py: conectar_postgres(), limpiar_ventas(conexion), cargar_ventas_aptas(df, conexion) y cargar_ventas_problemas(df, conexion).
+- La limpieza de ambas tablas y las tres inserciones se realizan con una sola conexión y una transacción administrada desde main.py; las funciones del loader no hacen commit() independiente.
+- main.py registra errores de PostgreSQL con logger.exception() y los propaga mediante raise; conserva el manejo de FileNotFoundError y ValueError.
+- Destinos existentes: raw.ventas (aptos tipados) y raw.ventas_problemas (rechazados y revisión con motivos_calidad TEXT[] y campos originales TEXT). En esta etapa no tienen PK ni claves foráneas.
+- PostgreSQL Docker: puerto host 5433 → contenedor 5432, base warehouse. pgAdmin: puerto host 8080 → contenedor 80.
+- Dependencias utilizadas: pandas==3.0.6, psycopg[binary]==3.3.6 y python-dotenv==1.2.4. Verificar antes del commit que requirements.txt contenga únicamente estas especificaciones, sin comandos de terminal.
+Resultados y pruebas DE-06
+- Carga exitosa: 11 aptos en raw.ventas y 7 problemáticos en raw.ventas_problemas (5 rechazados y 2 en revisión).
+- Valores originales preservados para investigación: fecha_invalida, cantidad -1, precio vacío, precio ABC y dos filas con clave duplicada de venta 1015 clasificadas como REVISION.
+- Idempotencia básica demostrada: dos ejecuciones del mismo CSV con carga full transaccional; después de la segunda se mantuvieron los conteos 11/5/2, sin acumular filas.
+- Reversión SQL demostrada: BEGIN; TRUNCATE; ROLLBACK; restauró las filas anteriores. Otra prueba con TRUNCATE, un INSERT correcto y un INSERT fallido por restricción NOT NULL terminó con ROLLBACK, conservando los 18 registros anteriores.
+- Prueba independiente con Psycopg: reversión de una inserción ante una excepción simulada.
+- Prueba de conexión fallida: psycopg.OperationalError con credenciales deliberadamente incorrectas.
+- Prueba independiente del logger: logger.exception() registró mensaje y traceback en consola y logs/pipeline.log; raise propagó la excepción.
+- No se ha probado todavía un fallo real de inserción invocando el pipeline completo desde main.py; las comprobaciones SQL, Psycopg y logger se realizaron por separado.
+- Los archivos temporales prueba_rollback.py y prueba_logger.py no forman parte de la implementación final ni deben incorporarse al commit.
+Decisiones de arquitectura
+- Diferenciar contrato estructural de origen (Python) y calidad de contenido (Pandas).
+- Conservar los valores originales y motivos de rechazados/revisión; no reemplazarlos por NaN o NaT transformados.
+- Las claves duplicadas aisladas se envían a revisión, no se descartan automáticamente.
+- APTO indica que un registro cumple las reglas de calidad implementadas, no que esté universalmente certificado.
+- source_row_number identifica la posición lógica dentro del archivo; para múltiples fuentes y lotes se necesitará una identidad de archivo/lote.
+- La tabla raw.ventas recibe registros aptos ya transformados: se reconoce como uso provisional de la capa RAW, no como una copia fiel del archivo de origen.
+- Para el CSV completo actual se eligió full transaccional: TRUNCATE de ambos destinos seguido de inserciones en la misma transacción.
+- TRUNCATE adquiere bloqueos ACCESS EXCLUSIVE y elimina todas las filas de las tablas indicadas. No aplicar automáticamente esta estrategia a tablas relacionadas, compartidas, voluminosas o con concurrencia sin analizar el diseño.
+- La idempotencia validada aplica al CSV completo y a las reglas actuales; todavía no existen batch_id, watermark, UPSERT ni identidad global de registros.
+- Postergar control de lotes, cargas incrementales, Airflow y dbt hasta que exista una necesidad didáctica y técnica concreta.
+Archivos relevantes
+PROJECT_STATE.md
+compose.yaml
+requirements.txt
 src/main.py
-src/extract/csv_extractor.py
 src/contracts/ventas_contract.py
 src/config/logging_config.py
-src/transform/__init__.py
+src/extract/csv_extractor.py
 src/transform/ventas_transformer.py
-src/quality/__init__.py
 src/quality/ventas_quality.py
 src/quality/ventas_policy.py
-requirements.txt
+src/load/__init__.py
+src/load/postgres_loader.py
 data/incoming/ventas.csv
-data/incoming/clientes.xlsx
-data/test_cases/ventas_cantidad_invalida.csv
-data/test_cases/ventas_estructura_invalida.csv
-data/test_cases/ventas_sin_registros.csv
+postgres/init/02-create-raw-ventas.sql
+postgres/init/03-create-raw-ventas-problemas.sql
 docs/guides/DE05_pandas_guia.md
-```
-
-## Git confirmado
-
-- Rama de trabajo `transformacion-pandas`, commit `1756a15` (`feat: implementar transformacion y calidad de ventas con pandas`).
-- Merge local en `main`: `e8c32e9` (`Merge branch 'transformacion-pandas'`).
-- `origin/main` sincronizado y árbol limpio, comprobados por el usuario.
-- Rama local `transformacion-pandas` eliminada correctamente.
-- La actualización de este archivo de estado **aún debe copiarse al repositorio y registrarse en un commit adicional**; no está incluida en `e8c32e9`.
-
-## Siguiente paso (DE-06)
-
-1. Revisar estructura actual, `compose.yaml`, esquemas PostgreSQL y configuración real disponible, sin inventar archivos ni conexiones.
-2. Explicar qué significa persistir las salidas de DE-05 y distinguir RAW de destinos de rechazados/revisión.
-3. Diseñar únicamente el primer contrato de destino y una carga inicial simple, después probarla; dejar estrategias full/append/incremental y controles de lote para cuando correspondan.
-4. No confundir la transformación inicial con dbt ni introducir orquestación prematuramente.
+docs/guides/DE06_postgresql_guia.md
+También existen archivos de prueba de DE-05 en data/test_cases/. Los archivos no relacionados de pruebas/guia_loc/ quedan fuera del commit de DE-06.
+Git
+DE-05 — Cerrado
+- Rama: transformacion-pandas.
+- Commit: 1756a15.
+- Merge local a main: e8c32e9.
+- origin/main sincronizado y rama de trabajo eliminada al cerrar DE-05.
+DE-06 — En progreso
+- Los cambios se desarrollaron inicialmente en main, sin commit.
+- Se indicó crear la rama feature/de06-postgresql; confirmar la rama activa con git branch --show-current antes del commit.
+- Archivos de DE-06 modificados o nuevos: .gitignore, PROJECT_STATE.md, compose.yaml, requirements.txt, src/main.py, loader, scripts SQL y guía DE-06.
+- Cambio verificado en compose.yaml: pgAdmin expuesto en 8080:80.
+- Cambio verificado en .gitignore: patrón NEXT_CHAT_DE*.md.
+- Archivos ajenos a este bloque: pruebas/guia_loc/loc.py y pruebas/guia_loc/mascaras_booleanas.py; no incluirlos en el commit de DE-06.
+- Pendientes: revisar archivos nuevos y cambios finales, git add selectivo, commit, merge local en main, push origin main y eliminación de rama. No se han confirmado commits ni push de DE-06.
+- Flujo Git vigente: rama local → verificación → commit → merge local en main → push de main → eliminación de rama; sin PR en esta etapa.
+Documentación
+- Guía de alumnos: docs/guides/DE06_postgresql_guia.md, versión 1.1, cubre PostgreSQL, Psycopg, SQL, persistencia, transacciones, logging, full, idempotencia y pruebas.
+- PROJECT_STATE.md es el estado operativo para continuidad entre chats; no reemplaza las guías didácticas.
+Siguiente paso
+1. Confirmar la rama activa y que requirements.txt contiene solo dependencias.
+2. Revisar el contenido de los archivos nuevos de DE-06 y preparar un commit selectivo, excluyendo pruebas/guia_loc/.
+3. Completar el flujo Git para la unidad de carga full, sin declarar todo DE-06 cerrado.
+4. Continuar DE-06 con un escenario de datos que justifique append e incremental; elegir la estrategia antes de escribir código nuevo.

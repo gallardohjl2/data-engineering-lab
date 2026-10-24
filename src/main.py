@@ -4,6 +4,7 @@ Punto de entrada principal del pipeline.
 
 import logging
 from pathlib import Path
+import psycopg
 
 from src.config.logging_config import setup_logging
 from src.contracts.ventas_contract import REQUIRED_COLUMNS
@@ -13,11 +14,16 @@ from src.quality.ventas_quality import (
     diagnosticar_calidad_detallada,
     construir_vista_investigacion,
 )
-
 from src.quality.ventas_policy import (
     aplicar_politica_calidad,
     separar_por_estado,
     preparar_aptos,
+)
+from src.load.postgres_loader import (
+    conectar_postgres,
+    cargar_ventas_aptas,
+    cargar_ventas_problemas,
+    limpiar_ventas,
 )
 
 
@@ -103,6 +109,32 @@ def main() -> None:
                 len(df_revision_final),
             )
 
+            # Persistencia de las tres salidas en una sola transacción
+            with conectar_postgres() as conexion:
+                limpiar_ventas(conexion)
+
+                cargar_ventas_aptas(
+                    df_aptos_final,
+                    conexion,
+                )
+
+                cargar_ventas_problemas(
+                    df_rechazados_final,
+                    conexion,
+                )
+
+                cargar_ventas_problemas(
+                    df_revision_final,
+                    conexion,
+                )
+
+            logger.info(
+                "Persistencia completada: %s aptos, %s rechazados y %s en revisión.",
+                len(df_aptos_final),
+                len(df_rechazados_final),
+                len(df_revision_final),
+            )
+
         else:
             logger.warning(
                 "El archivo fue extraído correctamente, pero no contiene registros."
@@ -120,6 +152,10 @@ def main() -> None:
             "Error durante el procesamiento: %s",
             error,
         )
+        raise
+
+    except psycopg.Error:
+        logger.exception("Error durante la conexión o persistencia en PostgreSQL.")
         raise
 
     finally:
