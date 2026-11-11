@@ -53,7 +53,10 @@ def cargar_ventas_aptas(df_aptos, conexion):
             descuento_pct
         )
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (venta_id, linea_id)
+        DO NOTHING
     """
+    registros_insertados = 0
     with conexion.cursor() as cursor:
         for fila in df_aptos.itertuples(index=False):
             valores = (
@@ -71,9 +74,17 @@ def cargar_ventas_aptas(df_aptos, conexion):
             )
 
             cursor.execute(sql, valores)
+            registros_insertados += cursor.rowcount
+
+    return registros_insertados
 
 
-def cargar_ventas_problemas(df_problemas, conexion):
+def cargar_ventas_problemas(
+    df_problemas,
+    conexion,
+    archivo_origen,
+    hash_archivo,
+):
     """
     Inserta registros rechazados o en revisión,
     conservando sus valores originales.
@@ -93,10 +104,21 @@ def cargar_ventas_problemas(df_problemas, conexion):
             sucursal_id,
             cantidad,
             precio_unitario,
-            descuento_pct
+            descuento_pct,
+            archivo_origen,
+            hash_archivo
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (
+            %s, %s, %s, %s, %s,
+            %s, %s, %s, %s, %s,
+            %s, %s, %s, %s, %s
+        )
+        ON CONFLICT (hash_archivo, source_row_number)
+        DO NOTHING
+
     """
+
+    registros_insertados = 0
 
     with conexion.cursor() as cursor:
         for fila in df_problemas.itertuples(index=False):
@@ -114,9 +136,14 @@ def cargar_ventas_problemas(df_problemas, conexion):
                 fila.cantidad,
                 fila.precio_unitario,
                 fila.descuento_pct,
+                archivo_origen,
+                hash_archivo,
             )
 
             cursor.execute(sql, valores)
+            registros_insertados += cursor.rowcount
+
+    return registros_insertados
 
 
 def limpiar_ventas(conexion):

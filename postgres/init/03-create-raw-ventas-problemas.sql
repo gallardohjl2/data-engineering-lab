@@ -18,7 +18,12 @@ CREATE TABLE IF NOT EXISTS raw.ventas_problemas (
     cantidad TEXT,
     precio_unitario TEXT,
     descuento_pct TEXT,
+    archivo_origen TEXT,
+    hash_archivo CHAR(64) NOT NULL,
 
     CONSTRAINT chk_estado_ventas_problemas
-        CHECK (estado_calidad IN ('RECHAZADO', 'REVISION'))
+        CHECK (estado_calidad IN ('RECHAZADO', 'REVISION')),
+
+    CONSTRAINT uq_ventas_problemas_archivo_fila
+        UNIQUE (hash_archivo, source_row_number)
 );
