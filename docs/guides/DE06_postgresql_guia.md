@@ -1,6 +1,6 @@
 # DE-06 — Persistencia PostgreSQL, calidad, transacciones e idempotencia
 
-**Guía para alumnos · versión 2.0 · FULL y APPEND implementadas y verificadas; INCREMENTAL pendiente**
+**Guía para alumnos · versión 2.1 · FULL y APPEND implementadas, verificadas y publicadas en GitHub; INCREMENTAL pendiente**
 
 > Esta versión conserva las pruebas de FULL de la guía 1.1 e incorpora los cambios reales de APPEND. INCREMENTAL, watermarks, control formal de lotes y reconciliación de correcciones **continúan pendientes**. Los ejemplos de fallo intencional se realizan solamente en el laboratorio.
 
@@ -566,19 +566,21 @@ El mensaje de error y traceback aparecieron en consola y en `logs/pipeline.log`.
 - FULL trunca ambas tablas enteras y toma bloqueos fuertes. Solo es adecuado para estos destinos dedicados del laboratorio. No introducir `TRUNCATE CASCADE` indiscriminadamente.
 - El esquema `raw` para aptos contiene datos transformados; es una decisión provisional del laboratorio.
 
-## 12. Git y documentación (antecedentes de FULL)
+## 12. Git y GitHub: antecedentes de FULL
 
-Flujo Git vigente para el laboratorio: rama local → cambios y verificación → `git status` → commit → merge local a `main` → `push origin main` → eliminar rama. FULL ya estaba integrado en `main` según el seguimiento posterior. La rama APPEND confirmada es `feature/de06-append`; su cierre Git aún está pendiente.
+En este laboratorio se ha seguido un flujo sencillo por funcionalidad: actualizar `main`, crear una rama, implementar y verificar, preparar un commit selectivo, integrar la rama en `main`, publicar `main` y eliminar la rama terminada. No se aplicó Git Flow complejo ni se abrió Pull Request en este cierre: el merge fue **local** y se publicó después.
 
-Comprobaciones seguras antes de registrar los archivos:
+**Historial de FULL realmente registrado:**
 
-```powershell
-git status
-git branch --show-current
-git ls-files -- .env
-```
+| Hito | Referencia observada |
+|---|---|
+| Rama de FULL | `feature/de06-postgresql` |
+| Commit de implementación FULL | `318341c` — `feat: implementar carga full transaccional en PostgreSQL` |
+| Merge de FULL en `main` | `dbff254` — `Merge branch 'feature/de06-postgresql'` |
 
-Revisar especialmente `src/main.py`, `src/load/postgres_loader.py`, los scripts `postgres/init/`, esta guía y `PROJECT_STATE.md`. El archivo `.env` y logs operativos no deben subirse.
+La siguiente sección de Git (18) reconstruye **todo el recorrido práctico de APPEND**, con comandos, explicaciones, verificaciones y errores encontrados. Se conserva esta sección para mostrar que FULL fue una unidad independiente y que APPEND evolucionó sobre su base.
+
+**Higiene del repositorio:** `.env`, credenciales y logs no deben versionarse. Comprobar si `.env` está seguido por Git mediante `git ls-files -- .env`; una salida vacía es la esperada. Esta comprobación no sustituye la revisión general de secretos antes de publicar.
 
 ## 13. Actividad de comprobación para los alumnos
 
@@ -968,20 +970,326 @@ if __name__ == "__main__":
 
 **Lectura sugerida:** primero identificar las salidas de extracción/calidad, luego observar que FULL ejecuta `TRUNCATE` y APPEND no, y finalmente comprobar que ambas comparten los mismos loaders, las claves de unicidad y una única transacción.
 
-## 18. Git y cierre de esta unidad
+## 18. Git y GitHub — cierre reproducible de APPEND (caso real)
 
-**Rama confirmada por el usuario:** `feature/de06-append`. FULL ya había sido integrado previamente a `main`. En esta rama se modificaron `src/main.py`, `src/load/postgres_loader.py`, `postgres/init/02-create-raw-ventas.sql`, `postgres/init/03-create-raw-ventas-problemas.sql` y el CSV `data/incoming/ventas_dia_2.csv`. El commit, el push, el merge y la eliminación de la rama de APPEND **todavía no están confirmados**.
+### 18.1 Objetivo didáctico y punto de partida
 
-Se detectaron además cambios personales **ajenos al cierre APPEND** en guías DE-05 y en `pruebas/`, junto con CSV temporales `ventas_prueba_problemas.csv` y `ventas_renombrado.csv`. No agregarlos indiscriminadamente. No agregar `.env`, logs ni credenciales. Revisar `.gitignore`: la carpeta de imágenes que se incluirá en las guías no debe estar ignorada.
+**Problema:** no basta con que la carga funcione en nuestra computadora; necesitamos un historial que permita identificar la funcionalidad, compartirla, repetir el laboratorio y no arrastrar ejercicios personales al repositorio remoto.
+
+Antes de este cierre, FULL ya estaba integrado en `main` mediante `dbff254`. APPEND se desarrolló en la rama `feature/de06-append`. Había archivos propios de APPEND **y** modificaciones ajenas al bloque: un cambio en la guía DE-05, CSV usados como pruebas y scripts en `pruebas/`. Se acordó conservarlos localmente, pero **no incluirlos** en el commit de APPEND.
+
+**Dónde ejecutar los comandos:** terminal PowerShell de VS Code, ubicada en la raíz `data-engineering-lab/`. Los resultados indicados como observados pertenecen al cierre real del proyecto; al reproducir la clase, cada estudiante tendrá hashes de commit distintos.
+
+**Distinciones esenciales:**
+
+- **Directorio de trabajo:** archivos y modificaciones visibles en el disco.
+- **Staging area / índice:** selección para el próximo commit, controlada mediante `git add`.
+- **Commit:** instantánea local registrada en una rama.
+- **Rama local:** referencia que permite desarrollar APPEND sin alterar inmediatamente `main`.
+- **`origin/main`:** referencia local del estado remoto conocido; se actualiza al traer/publicar cambios.
+- **Stash:** almacenamiento temporal de cambios que todavía no queremos confirmar; no es un commit de la funcionalidad y no es un respaldo remoto.
+
+### 18.2 Revisar los cambios antes de preparar el commit
 
 ```powershell
 git branch --show-current
-git status
+git status --short
 git diff --check
-# Revisar archivos concretos antes de ejecutar git add por rutas explícitas.
 ```
 
-En el siguiente paso práctico del chat: revisar esta guía generada contra el código local, copiar la versión aprobada, añadir solamente archivos DE-06, crear commit y completar el flujo Git acordado. **No hay commits inventados en esta guía.**
+`git branch --show-current` muestra en qué rama se trabaja (aquí, `feature/de06-append`). `git status --short` indica qué está modificado (`M`) y qué no sigue Git (`??`). `git diff --check` revisa problemas de espacios en los **cambios no preparados**. No prueba el código ni verifica el contenido funcional.
+
+**Archivos detectados de APPEND:**
+
+```text
+ M PROJECT_STATE.md
+ M docs/guides/DE06_postgresql_guia.md
+ M postgres/init/02-create-raw-ventas.sql
+ M postgres/init/03-create-raw-ventas-problemas.sql
+ M src/load/postgres_loader.py
+ M src/main.py
+?? data/incoming/ventas_dia_2.csv
+?? img/infografia_postgresql_full_vs_append.png
+```
+
+También existían cambios ajenos: `docs/guides/DE05_pandas_guia.md`, `docs/guides/DE05_pandas_guia_revisada.md`, `ventas_prueba_problemas.csv`, `ventas_renombrado.csv` y cinco archivos bajo `pruebas/`. Esos archivos se dejaron fuera del commit.
+
+**Advertencias reales de `git diff --check`:**
+
+| Aviso | Causa | Cómo se resolvió |
+|---|---|---|
+| `PROJECT_STATE.md:3` y `:5: trailing whitespace` | Dos espacios al final de líneas Markdown | Se eliminaron los espacios sobrantes; se conservó el texto |
+| `02-create-raw-ventas.sql:17: trailing whitespace` | Espacio después de `descuento_pct INTEGER NOT NULL,` | Se eliminó únicamente el espacio final, **no la coma** |
+| `DE06_postgresql_guia.md:989: new blank line at EOF` | Línea vacía adicional al final del archivo | Se eliminó la línea extra |
+| `03-create-raw-ventas-problemas.sql:30: new blank line at EOF` | Línea vacía adicional al final | Se eliminó la línea extra |
+
+Git reporta los números de línea de cada versión; al editar el documento pueden cambiar. En VS Code puede activarse **View → Appearance → Render Whitespace**. Tras guardar, `git diff --check` no mostró mensajes: esa es la comprobación esperada.
+
+### 18.3 Preparar exclusivamente los ocho archivos de APPEND
+
+```powershell
+git add PROJECT_STATE.md
+git add docs/guides/DE06_postgresql_guia.md
+git add postgres/init/02-create-raw-ventas.sql
+git add postgres/init/03-create-raw-ventas-problemas.sql
+git add src/load/postgres_loader.py
+git add src/main.py
+git add data/incoming/ventas_dia_2.csv
+git add img/infografia_postgresql_full_vs_append.png
+```
+
+Cada `git add <ruta>` coloca en staging el estado actual del archivo indicado. **No se usó `git add .`**: hacerlo habría incorporado ejercicios y CSV de prueba que no pertenecían a la funcionalidad. Antes de confirmar, revisar:
+
+```powershell
+git diff --cached --stat
+git diff --cached --name-only
+git diff --cached --check
+git status
+```
+
+`--cached` (también llamado `--staged`) inspecciona **lo preparado**. `--stat` muestra un resumen; `--name-only`, la lista; `--check`, advertencias de espacios en staging. Es recomendable inspeccionar también `git diff --cached` para revisar el código y SQL si se está enseñando una revisión de cambios.
+
+**Resumen observado:**
+
+```text
+ PROJECT_STATE.md                                 | 188 +++---
+ data/incoming/ventas_dia_2.csv                   |   6 +
+ docs/guides/DE06_postgresql_guia.md              | 748 +++++++++++++++++++----
+ img/infografia_postgresql_full_vs_append.png     | Bin 0 -> 2102552 bytes
+ postgres/init/02-create-raw-ventas.sql           |   4 +-
+ postgres/init/03-create-raw-ventas-problemas.sql |   7 +-
+ src/load/postgres_loader.py                      |  33 +-
+ src/main.py                                      |  62 +-
+ 8 files changed, 815 insertions(+), 233 deletions(-)
+```
+
+La imagen binaria figura como archivo nuevo. Ocho archivos es el alcance aprobado de este commit, **no una cantidad obligatoria** para otros repositorios.
+
+### 18.4 Confirmar la funcionalidad mediante un commit
+
+```powershell
+git commit -m "feat: implementar carga append idempotente en PostgreSQL"
+git log -1 --oneline
+git status
+```
+
+`git commit -m` registra en la rama actual lo que estaba en staging; `-m` aporta el mensaje. La palabra `feat` comunica una nueva funcionalidad, según una convención de mensajes sencilla.
+
+**Salida observada:**
+
+```text
+[feature/de06-append b0e59af] feat: implementar carga append idempotente en PostgreSQL
+ 8 files changed, 815 insertions(+), 233 deletions(-)
+ create mode 100644 data/incoming/ventas_dia_2.csv
+ create mode 100644 img/infografia_postgresql_full_vs_append.png
+```
+
+Después de este commit, `git status` **no estaba limpio** porque seguían existiendo los archivos personales no preparados. Eso era correcto: `git commit` no confirma automáticamente todos los archivos de la carpeta.
+
+### 18.5 Proteger los cambios locales ajenos a APPEND con `git stash`
+
+Para cambiar de rama sin arriesgar ni mezclar esas modificaciones, se ejecutó:
+
+```powershell
+git stash push -u -m "WIP: ejercicios y cambios personales pendientes"
+git stash list
+git status
+```
+
+- `stash push`: guarda los cambios locales sin confirmar y los retira temporalmente del directorio de trabajo.
+- `-u`: incluye archivos **no rastreados** (`??`), además de cambios en archivos rastreados; no incluye por defecto archivos ignorados.
+- `-m`: pone una descripción que permita reconocer el conjunto.
+- `stash list`: permite verificar que la entrada existe.
+
+**Resultados observados:**
+
+```text
+Saved working directory and index state On feature/de06-append: WIP: ejercicios y cambios personales pendientes
+stash@{0}: On feature/de06-append: WIP: ejercicios y cambios personales pendientes
+On branch feature/de06-append
+nothing to commit, working tree clean
+```
+
+Durante la operación también apareció: `LF will be replaced by CRLF the next time Git touches it` para la guía revisada de DE-05. **No fue un error ni impidió el stash**: describe una conversión posible de finales de línea. Es útil explicar la diferencia entre LF (Unix) y CRLF (Windows) sin cambiar automáticamente la configuración del repositorio por una sola advertencia.
+
+**Advertencia pedagógica:** `stash` no equivale a publicar o respaldar permanentemente archivos. Si se trabaja en otra máquina, los archivos guardados en el stash local no viajan mediante `git push`.
+
+### 18.6 Cambiar a `main` y actualizarla desde GitHub
+
+```powershell
+git switch main
+git pull --ff-only origin main
+git status
+git log -1 --oneline
+```
+
+`git switch main` cambia a la rama principal. `git pull --ff-only origin main` trae e integra el estado remoto **solo si puede hacerlo mediante fast-forward**, sin crear un merge inesperado. Si hay divergencia, detiene la operación para revisar el caso.
+
+**Estado observado:**
+
+```text
+Already up to date.
+On branch main
+Your branch is up to date with 'origin/main'.
+nothing to commit, working tree clean
+
+dbff254 (HEAD -> main, origin/main, origin/HEAD) Merge branch 'feature/de06-postgresql'
+```
+
+La rama `main` aún contenía FULL, pero **no** APPEND. De este modo comprobamos que el merge siguiente tenía un propósito claro.
+
+### 18.7 Integrar APPEND en `main` mediante un merge local
+
+```powershell
+git merge --no-ff feature/de06-append
+git status
+git log --oneline --graph --decorate -5
+```
+
+`git merge` integra los commits de la rama de trabajo a la rama actual (`main`). `--no-ff` fuerza un **commit de merge**, incluso si era posible mover directamente el puntero. Se eligió para que el historial muestre la unidad didáctica APPEND como una rama integrada.
+
+**Verificación observada:**
+
+```text
+On branch main
+Your branch is ahead of 'origin/main' by 2 commits.
+nothing to commit, working tree clean
+```
+
+```text
+*   58de9ee (HEAD -> main) Merge branch 'feature/de06-append'
+|\
+| * b0e59af (feature/de06-append) feat: implementar carga append idempotente en PostgreSQL
+|/
+*   dbff254 (origin/main, origin/HEAD) Merge branch 'feature/de06-postgresql'
+```
+
+Estar *ahead by 2 commits* significaba que el commit funcional `b0e59af` **y** el merge `58de9ee` eran locales y faltaba publicarlos. No indicaba un error. Si Git abre el historial en un visor con `(END)`, se sale pulsando `q`.
+
+### 18.8 Publicar `main` en GitHub y comprobar la sincronización
+
+```powershell
+git push origin main
+git status
+git log --oneline --graph --decorate -5
+```
+
+`git push origin main` envía los commits de la rama local `main` al remoto llamado `origin`. No publica el stash ni todos los archivos locales, solo los commits que forman parte de la rama enviada.
+
+**Resultados finales observados:**
+
+```text
+On branch main
+Your branch is up to date with 'origin/main'.
+nothing to commit, working tree clean
+```
+
+```text
+*   58de9ee (HEAD -> main, origin/main, origin/HEAD) Merge branch 'feature/de06-append'
+|\
+| * b0e59af (feature/de06-append) feat: implementar carga append idempotente en PostgreSQL
+|/
+*   dbff254 Merge branch 'feature/de06-postgresql'
+|\
+| * 318341c feat: implementar carga full transaccional en PostgreSQL
+|/
+* 2c885db docs: cerrar DE05 y actualizar estado del proyecto
+```
+
+La coincidencia de `main` y `origin/main` en `58de9ee` evidencia la sincronización local/remota observada. En GitHub puede abrirse el historial de `main` para señalar a los alumnos los dos commits funcionales y sus merges.
+
+### 18.9 Recuperar ejercicios y retirar el stash tras verificar
+
+Una vez publicado APPEND, se recuperaron los archivos personales sin mezclarlos en el commit:
+
+```powershell
+git stash list
+git stash apply "stash@{0}"
+git status
+```
+
+Se usó `apply` y no `pop`: **`apply` conserva el stash** como copia temporal mientras verificamos que reaparecieron los archivos. Las comillas hacen inequívoco el argumento en PowerShell. La aplicación de un stash en otra rama puede producir conflictos si allí cambiaron las mismas líneas; en ese caso hay que resolverlos antes de considerar recuperado el trabajo.
+
+**Estado recuperado observado:**
+
+```text
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes not staged for commit:
+        modified:   docs/guides/DE05_pandas_guia.md
+
+Untracked files:
+        data/incoming/ventas_prueba_problemas.csv
+        data/incoming/ventas_renombrado.csv
+        docs/guides/DE05_pandas_guia_revisada.md
+        pruebas/guia_loc/groupby.py
+        pruebas/guia_loc/loc.py
+        pruebas/guia_loc/mascaras_booleanas.py
+        pruebas/prueba_loader_problemas.py
+        pruebas/prueba_merge.py
+```
+
+Se comprobó que eran los mismos archivos personales anteriores. **Solo después de recuperar y revisar** se eliminó la entrada del stash:
+
+```powershell
+git stash list
+git stash drop "stash@{0}"
+git stash list
+```
+
+**Resultado final comunicado:** `git stash list` ya no mostró entradas. `stash drop` elimina el respaldo temporal, pero **no borra** los cambios que ya fueron aplicados al directorio de trabajo. Si hubiera varias entradas en la lista, se debe verificar la identidad de cada una antes de eliminarla.
+
+### 18.10 Eliminar la rama local ya integrada
+
+```powershell
+git branch -d feature/de06-append
+git branch
+git status
+```
+
+`git branch -d` elimina la referencia local de una rama integrada; a diferencia de `-D`, no fuerza el borrado cuando Git considera que no está fusionada. No elimina los commits de APPEND que ya forman parte de `main`. Tampoco elimina una rama remota: en este recorrido no se registró publicación de una rama remota `feature/de06-append`, por lo que **no hay evidencia de que hubiera una rama remota que eliminar**.
+
+**Verificación observada:**
+
+```text
+* main
+```
+
+`git status` continuó mostrando los cambios personales recuperados, lo cual es esperado. **Un cierre correcto de una funcionalidad no exige borrar o confirmar archivos ajenos a ella.**
+
+### 18.11 Resumen de evidencias del cierre real
+
+| Elemento | Evidencia |
+|---|---|
+| FULL: commit funcional | `318341c` |
+| FULL: merge a `main` | `dbff254` |
+| APPEND: rama de trabajo | `feature/de06-append` (eliminada localmente al cerrar) |
+| APPEND: commit funcional | `b0e59af` |
+| APPEND: merge a `main` | `58de9ee` |
+| Sincronización remota final | `HEAD -> main, origin/main, origin/HEAD` en `58de9ee` |
+| Archivos confirmados en APPEND | 8, seleccionados por ruta |
+| Archivos personales | Recuperados desde stash; permanecen sin confirmar |
+| Stash al cierre | Lista vacía, verificada por el usuario |
+| Pull Request | No se realizó; merge local y push de `main` |
+
+### 18.12 Errores habituales y actividad para alumnos
+
+| Problema | Explicación / acción recomendable |
+|---|---|
+| `git diff --check` reporta `trailing whitespace` | Localizar espacios al final de línea, corregir y repetir la verificación |
+| `git diff --check` no muestra nada | Bien: no detecta problemas de espacios, pero **no** garantiza que el código funcione |
+| Se usa `git add .` con ejercicios personales | Revisar staging mediante `git diff --cached --name-only`; retirar archivos no deseados del índice antes del commit |
+| Git impide cambiar de rama | Revisar cambios pendientes; guardar mediante commit apropiado o stash antes de cambiar |
+| El usuario interpreta `ahead by 2 commits` como error | Son commits locales pendientes de publicar; comprobar con `git log` y luego `git push` |
+| `LF will be replaced by CRLF` | Advertencia de finales de línea; verificar la configuración, no asumir fallo funcional |
+| `git log` muestra `(END)` | Presionar `q` para salir del visor |
+| `stash apply` produce conflictos | No eliminar el stash; resolver primero y verificar los archivos recuperados |
+| Se intenta eliminar la rama con `-D` sin necesidad | Preferir `git branch -d` tras comprobar que se integró |
+
+**Actividad reproducible:** en parejas, pedir al alumnado que identifique qué ocho archivos pertenecen a APPEND, explique por qué los CSV de prueba no entran en el commit, ubique el commit funcional y el merge en `git log --graph`, y demuestre la diferencia entre `stash apply` y `stash pop`. En una reproducción nueva, no deben copiar los hashes reales de esta guía como si fueran sus propios resultados.
+
+**Nota para docentes:** si se desea practicar Pull Requests en GitHub en otro grupo, se puede adaptar el flujo a `push` de rama + PR + revisión + merge remoto. Este caso documenta lo que **efectivamente se ejecutó**: merge local y posterior `push origin main`.
 
 ## 19. Qué sigue después de APPEND
 

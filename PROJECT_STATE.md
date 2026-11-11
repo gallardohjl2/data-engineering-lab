@@ -1,9 +1,8 @@
 # PROJECT_STATE — Data Engineering Lab
 
 **Actualizado:** 10 de noviembre de 2026
-
 **Bloque activo:** DE-06 — Carga y persistencia en PostgreSQL
-**Situación:** FULL y APPEND implementadas y verificadas. Pendiente cerrar la rama de APPEND con Git; INCREMENTAL aún no iniciada.
+**Situación:** FULL y APPEND implementadas, verificadas, documentadas e integradas en `main` y GitHub. Pendiente confirmar el commit de la ampliación didáctica Git/GitHub de la guía y este cierre de estado; INCREMENTAL aún no iniciada.
 
 ## 1. Propósito y arquitectura
 
@@ -17,7 +16,7 @@ Laboratorio didáctico: CSV / Excel / SQL Server → extracción y contrato estr
 - DE-04 (extracción, contrato estructural y logging): terminado.
 - DE-05 (transformación y calidad con Pandas): terminado.
 - **DE-06 FULL: implementada, probada, documentada y cerrada en Git.**
-- **DE-06 APPEND: implementada y probada; documentación actualizada localmente según el usuario; cierre Git pendiente.**
+- **DE-06 APPEND: implementada, probada, documentada e integrada en `main` y GitHub.**
 - **DE-06 INCREMENTAL: pendiente.**
 
 ## 3. Estado funcional confirmado
@@ -75,18 +74,18 @@ Laboratorio didáctico: CSV / Excel / SQL Server → extracción y contrato estr
 - Código: `src/main.py`, `src/load/postgres_loader.py`, `src/extract/csv_extractor.py`, `src/contracts/ventas_contract.py`, `src/transform/ventas_transformer.py`, `src/quality/ventas_quality.py`, `src/quality/ventas_policy.py`, `src/config/logging_config.py`.
 - SQL: `postgres/init/02-create-raw-ventas.sql`, `postgres/init/03-create-raw-ventas-problemas.sql` (restricciones ya incorporadas en scripts y PostgreSQL).
 - Datos: `data/incoming/ventas.csv`, `data/incoming/ventas_dia_2.csv`. `ventas_prueba_problemas.csv` y `ventas_renombrado.csv` fueron usados para pruebas: **no incluir automáticamente en el commit**.
-- Documentación: `docs/guides/DE06_postgresql_guia.md` (FULL + APPEND, versión actualizada declarada por el usuario), `img/infografia_postgresql_full_vs_append.png` (confirmar ubicación/referencia exactas en el repositorio).
+- Documentación: `docs/guides/DE06_postgresql_guia.md` (FULL + APPEND + procedimiento didáctico Git/GitHub, versión 2.1 reemplazada localmente según el usuario), `img/infografia_postgresql_full_vs_append.png` (confirmar ubicación/referencia exactas en el repositorio).
 - Estado y configuración: `PROJECT_STATE.md`, `requirements.txt`, `compose.yaml`, `.gitignore`.
 - Mantener fuera del commit de APPEND los cambios no relacionados en `docs/guides/DE05_pandas_guia.md`, `docs/guides/DE05_pandas_guia_revisada.md` y scripts personales bajo `pruebas/`.
 
-## 7. Git — situación conocida
+## 7. Git — cierre confirmado
 
-- DE-05: rama `transformacion-pandas`, commit `1756a15`, merge local `e8c32e9`; cerrada.
-- DE-06 FULL: rama `feature/de06-postgresql`, commit `318341c`; merge a `main` `dbff254`; `origin/main` sincronizado y rama eliminada, según verificaciones previas.
-- **DE-06 APPEND:** rama activa `feature/de06-append` (confirmada por `git branch --show-current`). Trabajo y pruebas terminados, **sin commit, merge ni push confirmados para APPEND**.
-- Modificados observados: `src/main.py`, `src/load/postgres_loader.py`, `postgres/init/02-create-raw-ventas.sql`, `postgres/init/03-create-raw-ventas-problemas.sql`, cambio independiente en guía DE-05; `.gitignore` mostraba una línea `img` que se indicó retirar (verificar estado final).
-- Untracked observados: `data/incoming/ventas_dia_2.csv`, archivos de prueba, guía revisada DE-05, infografía y scripts de `pruebas/`. El usuario indicó que reemplazó la guía DE-06 y mantuvo una única infografía; **revisar rutas reales antes de hacer staging**.
-- Flujo acordado para esta unidad: revisar estado y diferencias → `git add` **selectivo** → commit en rama → push / PR si corresponde al flujo vigente → merge → actualizar `main` → eliminar rama. No incluir `.env`, logs ni pruebas ajenas.
+- DE-05: rama `transformacion-pandas`, commit `1756a15`, merge `e8c32e9`; cerrada.
+- DE-06 FULL: commit `318341c` en `feature/de06-postgresql`; merge `dbff254` en `main`.
+- DE-06 APPEND: commit `b0e59af` (`feat: implementar carga append idempotente en PostgreSQL`), merge `58de9ee` (`Merge branch 'feature/de06-append'`). `main` y `origin/main` apuntaban ambos a `58de9ee` según salida verificada; rama local `feature/de06-append` eliminada, quedando solo `main`.
+- Antes del merge se protegieron cambios independientes con `git stash push -u`; se recuperaron en `main` con `git stash apply`. El usuario confirmó que `git stash list` quedó vacío.
+- **Cambios locales ajenos al cierre conservados:** `docs/guides/DE05_pandas_guia.md`, `docs/guides/DE05_pandas_guia_revisada.md`, `data/incoming/ventas_prueba_problemas.csv`, `data/incoming/ventas_renombrado.csv` y archivos de `pruebas/`. No usar `git add .` para el commit documental.
+- **Nueva documentación después del merge:** el usuario confirmó que sustituyó `docs/guides/DE06_postgresql_guia.md` por la versión 2.1 con la secuencia completa de Git y GitHub. Esta actualización aún **no tiene commit ni push confirmados**. Este `PROJECT_STATE.md` también debe incorporarse en un commit documental selectivo.
 
 ## 8. Documentación y forma de enseñanza
 
@@ -95,8 +94,7 @@ Laboratorio didáctico: CSV / Excel / SQL Server → extracción y contrato estr
 
 ## 9. Próximos pasos
 
-1. Sustituir el contenido de `PROJECT_STATE.md` en el repositorio por este estado actualizado, tras revisarlo.
-2. Verificar `git status --short`, `git diff --check`, guía FULL + APPEND, infografía y `.gitignore`; revisar que `requirements.txt` esté correcto y que el `.env` no esté versionado.
-3. Seleccionar explícitamente los archivos de APPEND y documentación para el commit; no arrastrar cambios de DE-05 ni pruebas personales.
-4. Cerrar Git de APPEND y actualizar este estado con commit, merge y push **solo después de confirmarlos**.
-5. Continuar DE-06 con **INCREMENTAL**, definiendo primero el escenario de actualización, política de conflictos y eventual watermark/control de lotes, sin implementar todo de una vez.
+1. Guardar este `PROJECT_STATE.md` y comprobar el estado real de Git con `git status --short` y `git diff --check`.
+2. Preparar **solo** `docs/guides/DE06_postgresql_guia.md` y `PROJECT_STATE.md` para un commit de documentación; revisar con `git diff --cached --stat` y `git diff --cached --check`. No incluir DE-05 ni archivos de ejercicios/pruebas.
+3. Crear y publicar el commit documental en el flujo Git acordado; anotar su hash real aquí cuando esté confirmado. No afirmarlo antes.
+4. Siguiente chat recomendado: **DE-06 — Carga incremental, watermarks y control de lotes**. Comenzar por un escenario concreto de cambios de registros, distinguir APPEND vs INCREMENTAL y decidir el criterio mínimo antes de escribir código.
