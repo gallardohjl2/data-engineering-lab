@@ -14,5 +14,7 @@ CREATE TABLE IF NOT EXISTS raw.ventas (
     sucursal_id TEXT,
     cantidad INTEGER NOT NULL,
     precio_unitario NUMERIC(12,2) NOT NULL,
-    descuento_pct INTEGER NOT NULL
+    descuento_pct INTEGER NOT NULL,
+    CONSTRAINT uq_raw_ventas_clave
+    UNIQUE (venta_id, linea_id)
 );
